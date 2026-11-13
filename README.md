@@ -18,15 +18,14 @@ Conventional fixed-threshold protection reacts only after a limit is crossed, an
 - **Thermal trend prediction:** an 8-sample temperature-rise detector that warns before the hard limit is reached.
 - **Adaptive recovery:** the battery is reconnected only after several consecutive safe samples.
 
-A fixed-threshold **baseline controller** is integrated alongside it, so both strategies can be compared on the same silicon.
+A fixed-threshold **baseline controller** was used for comparison in simulation (`research/`). It is not on the chip, to keep the design within one tile.
 
 ## Architecture
 
 ```
 ui_in (bytes) ──► sample ring buffer ──► 3-sample moving average ──┬─► sensor validator ──┐
                   (3 slots/channel)      (shared bit-serial ÷3)    ├─► thermal predictor ─┤
-                                                                   ├─► baseline controller│──► uo_out / uio_out
-                                                                   └─► proposed controller ◄┘
+                                                                   └─► proposed controller ◄┘──► uo_out / uio_out
 ```
 
 | File | Function |
@@ -36,7 +35,6 @@ ui_in (bytes) ──► sample ring buffer ──► 3-sample moving average ─
 | `src/moving_average3.v` | Sample buffer, moving-average filter, change detection |
 | `src/sensor_validator.v` | Range and stuck-sensor checks, fault codes |
 | `src/thermal_predictor.v` | 8-sample temperature-rise predictor |
-| `src/baseline_controller.v` | Fixed-threshold reference controller |
 | `src/proposed_controller.v` | Adaptive controller: normal / warning / critical / sensor-degraded |
 
 ## Pinout
@@ -51,29 +49,31 @@ ui_in (bytes) ──► sample ring buffer ──► 3-sample moving average ─
 | uo[3] | out | ISOLATE (MOSFET gate request) |
 | uo[4] | out | SENSOR_DEGRADED |
 | uo[5] | out | THERMAL_RISK |
-| uo[6] | out | Baseline isolate |
-| uo[7] | out | Baseline derate |
+| uo[6] | out | WARNING (state 1) |
+| uo[7] | out | CRITICAL (state 2) |
 | uio[4:2] | out | Sensor fault code |
-| uio[6:5] | out | Baseline state |
+| uio[6:5] | – | Unused |
 | uio[7] | out | BUSY |
 
 See [docs/info.md](docs/info.md) for the byte protocol and a worked example.
 
 ## Implementation for one tile
 
-The original V2.1 RTL synthesized to about 18,500 µm² of SKY130 standard cells, which is larger than a whole 1x1 tile (about 160 × 110 µm). The taped-out RTL keeps exactly the same behaviour in about 11,500 µm², roughly 70% of the tile, by:
+The original V2.1 RTL synthesized to about 18,500 µm² of SKY130 standard cells, which is larger than a whole 1x1 tile (161 × 111.5 µm). The taped-out RTL fits one tile by:
 
-- replacing three combinational divide-by-3 circuits with one shared, exact, bit-serial divider (about 56 clock cycles per sample, 5.6 µs at 10 MHz);
+- replacing three combinational divide-by-3 circuits with one shared, exact, bit-serial divider (about 47 clock cycles per sample, 4.7 µs at 10 MHz);
 - storing samples in a 3-slot ring buffer per channel that bytes are written into directly;
 - computing the stuck-sensor change flags while the new filtered value is shifted in, with a 4-bit saturating difference instead of separate 16-bit registers and subtractors;
+- storing values at the sensors' full-scale widths (13/11/11 bit) with clipping of over-range readings;
+- running the baseline controller only in simulation;
 - removing resets from registers that are always written before they are read.
 
-`src/config.json` sets `CLOCK_PERIOD` to 100 ns (10 MHz) and `PL_TARGET_DENSITY_PCT` to 80, within the range the template recommends, because the design fills about 70% of the tile.
+For every sample within full scale (≤ 8191 mV, ≤ 2047 mA, ≤ 204.7 °C), the chip gives exactly the same filtered values and decisions as the original V2.1 RTL. `src/config.json` sets `CLOCK_PERIOD` to 100 ns (10 MHz) and `PL_TARGET_DENSITY_PCT` to 80, within the range the template recommends.
 
 ## Verification
 
-- `test/`: a cocotb test suite with 9 tests. It covers reset and pin directions, nominal operation, over-temperature, over-voltage and over-current, a stuck sensor that degrades without isolating, thermal prediction before the hard limit, recovery hysteresis, and the BUSY handshake. The same tests run on the gate-level netlist in the GDS workflow.
-- `research/run_equivalence.sh`: compares the taped-out core with the original V2.1 RTL (`research/reference_rtl/`) on more than 27,000 directed, boundary and random samples. Every output matches bit for bit. The test was checked by injecting deliberate bugs, and all of them were detected.
+- `test/`: a cocotb test suite with 10 tests. It covers reset and pin directions, nominal operation, over-temperature, over-voltage and over-current, a stuck sensor that degrades without isolating, thermal prediction before the hard limit, recovery hysteresis, the BUSY handshake and clipping of over-range readings. The same tests run on the gate-level netlist in the GDS workflow.
+- `research/run_equivalence.sh`: compares the taped-out core with the original V2.1 RTL (`research/reference_rtl/`) on more than 27,000 directed, boundary and random samples, with over-range values clipped for the original. Every filtered value and decision matches bit for bit. The test was checked by injecting deliberate bugs, and all of them were detected.
 - `research/run_dataset_eval.sh`: synthetic-dataset comparison of the baseline and proposed controllers (`research/model/`).
 
 Run the tests locally:

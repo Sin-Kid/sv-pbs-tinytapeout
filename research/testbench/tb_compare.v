@@ -1,6 +1,7 @@
 `timescale 1ns/1ps
 `default_nettype none
-// Dataset evaluation of the taped-out SV-PBS core.
+// Dataset evaluation: proposed controller = taped-out SV-PBS core;
+// baseline controller = original V2.1 core (reference_rtl), which is not on the chip.
 // Reads research/dataset/vectors.csv, writes research/results/aligned_results.csv.
 // Outputs are recorded after each sample has fully propagated (BUSY low),
 // so filtered values and controller decisions belong to the same sample.
@@ -11,11 +12,15 @@ module tb_compare;
   wire [1:0] bs, ps; wire bd, bi, pd, pi, sd, pr, busy; wire [2:0] fc;
   integer fd, od, rc, idx, v, i, t, lf, lc; reg [8*128-1:0] header;
 
+  reg [15:0] rv, ri; reg [11:0] rt;
+  wire [15:0] rfv, rfi; wire [11:0] rft; wire [1:0] rps; wire rpd, rpi, rsd, rpr; wire [2:0] rfc;
   sv_pbs_core dut(.clk(clk), .rst_n(rst_n), .wr_en(wr_en), .wr_idx(wr_idx), .wr_data(wr_data),
     .sample_valid(sample_valid), .filtered_voltage(fv), .filtered_current(fi),
-    .filtered_temperature(ft), .baseline_state(bs), .proposed_state(ps),
-    .baseline_derate(bd), .baseline_isolate(bi), .proposed_derate(pd), .proposed_isolate(pi),
+    .filtered_temperature(ft), .proposed_state(ps),
+    .proposed_derate(pd), .proposed_isolate(pi),
     .sensor_degraded(sd), .predicted_risk(pr), .sensor_fault_code(fc), .busy(busy));
+  ref_sv_pbs_core ref_core(clk, rst_n, sample_valid, rv, ri, rt, rfv, rfi, rft,
+    bs, rps, bd, bi, rpd, rpi, rsd, rpr, rfc);
   always #5 clk = ~clk;
 
   task wbyte(input [2:0] k, input [7:0] d);
@@ -32,6 +37,7 @@ module tb_compare;
     while (!$feof(fd)) begin
       rc = $fscanf(fd, "%d,%d,%d,%d,%d\n", v, i, t, lf, lc);
       if (rc == 5) begin
+        rv = v; ri = i; rt = t;
         wbyte(0, v[15:8]); wbyte(1, v[7:0]); wbyte(2, i[15:8]); wbyte(3, i[7:0]);
         wbyte(4, t[11:4]); wbyte(5, {4'h0, t[3:0]});
         @(negedge clk); sample_valid = 1; @(negedge clk); sample_valid = 0;

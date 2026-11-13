@@ -13,7 +13,8 @@ iverilog = shutil.which("iverilog") or "iverilog"
 
 sources = [str(p) for p in sorted(SRC.glob("*.v")) if p.name != "project.v"]
 (R / "results").mkdir(exist_ok=True)
-subprocess.run([iverilog, "-g2012", "-o", str(R / "sim_compare.out"), *sources,
+ref = [str(p) for p in sorted((R / "reference_rtl").glob("*.v"))]
+subprocess.run([iverilog, "-g2012", "-o", str(R / "sim_compare.out"), *sources, *ref,
                 str(R / "testbench" / "tb_compare.v")], check=True)
 
 results = []
