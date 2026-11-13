@@ -25,10 +25,9 @@ def outputs(dut):
         "isolate": (uo >> 3) & 1,
         "degraded": (uo >> 4) & 1,
         "risk": (uo >> 5) & 1,
-        "base_isolate": (uo >> 6) & 1,
-        "base_derate": (uo >> 7) & 1,
+        "warning": (uo >> 6) & 1,
+        "critical": (uo >> 7) & 1,
         "fault": (uio >> 2) & 0x7,
-        "base_state": (uio >> 5) & 0x3,
         "busy": (uio >> 7) & 1,
     }
 
@@ -76,7 +75,7 @@ async def send_sample(dut, voltage_mv, current_ma, temp_dc):
 @cocotb.test()
 async def test_reset_and_pin_directions(dut):
     await reset(dut)
-    assert int(dut.uio_oe.value) == 0xFC, "uio[1:0] must be inputs, uio[7:2] outputs"
+    assert int(dut.uio_oe.value) == 0x9C, "uio[1:0],[6:5] inputs; uio[4:2],[7] outputs"
     o = outputs(dut)
     assert o["state"] == NORMAL and o["isolate"] == 0 and o["derate"] == 0
     assert o["busy"] == 0
@@ -90,7 +89,7 @@ async def test_nominal_operation(dut):
     dut._log.info(f"nominal: {o}")
     assert o["state"] == NORMAL
     assert o["isolate"] == 0 and o["derate"] == 0
-    assert o["base_isolate"] == 0 and o["base_derate"] == 0
+    assert o["warning"] == 0 and o["critical"] == 0
     assert o["degraded"] == 0 and o["fault"] == 0 and o["risk"] == 0
 
 
@@ -103,7 +102,7 @@ async def test_over_temperature_isolates(dut):
         o = await send_sample(dut, 3700, 200, 550)  # 55.0 degC
     dut._log.info(f"over-temperature: {o}")
     assert o["state"] == CRITICAL and o["isolate"] == 1 and o["derate"] == 1
-    assert o["base_isolate"] == 1
+    assert o["critical"] == 1 and o["warning"] == 0
 
 
 @cocotb.test()
@@ -114,7 +113,6 @@ async def test_over_voltage_isolates(dut):
     for _ in range(4):
         o = await send_sample(dut, 4700, 200, 300)  # 4.7 V
     assert o["state"] == CRITICAL and o["isolate"] == 1
-    assert o["base_state"] == CRITICAL and o["base_isolate"] == 1
 
 
 @cocotb.test()
@@ -125,6 +123,7 @@ async def test_over_current_warning_then_critical(dut):
     for _ in range(4):
         o = await send_sample(dut, 3700, 500, 300)   # 0.5 A: derate only
     assert o["state"] == WARNING and o["derate"] == 1 and o["isolate"] == 0
+    assert o["warning"] == 1 and o["critical"] == 0
     for _ in range(4):
         o = await send_sample(dut, 3700, 1100, 300)  # 1.1 A: isolate
     assert o["state"] == CRITICAL and o["isolate"] == 1
@@ -207,3 +206,15 @@ async def test_busy_ignores_input(dut):
     for _ in range(3):
         o = await send_sample(dut, 3700, 200, 300)
     assert o["state"] == NORMAL and o["isolate"] == 0
+
+
+@cocotb.test()
+async def test_out_of_range_is_clipped(dut):
+    """Readings above full scale (here 65.535 V) are clipped and flagged."""
+    await reset(dut)
+    for _ in range(4):
+        await send_sample(dut, 3700, 200, 300)
+    for _ in range(4):
+        o = await send_sample(dut, 0xFFFF, 200, 300)
+    assert o["state"] == CRITICAL and o["isolate"] == 1
+    assert o["degraded"] == 1 and o["fault"] == 1   # voltage out of sensor range

@@ -11,15 +11,17 @@
  *   Byte order: 0 voltage[15:8], 1 voltage[7:0], 2 current[15:8],
  *               3 current[7:0], 4 temperature[11:4], 5 temperature[3:0]
  *               (in ui_in[3:0]).
- *   uio_out[7] (busy) is high for ~60 clocks after a commit; strobes and
+ *   Units: mV, mA, 0.1 degC. Values above 8191 mV / 2047 mA / 204.7 degC are
+ *   clipped to those maxima.
+ *   uio_out[7] (busy) is high for ~50 clocks after a commit; strobes and
  *   commits are ignored while busy.
  *
  * Outputs
  *   uo_out[1:0] proposed state (0 normal, 1 warning, 2 critical, 3 sensor-degraded)
  *   uo_out[2] proposed derate     uo_out[3] proposed isolate (MOSFET gate request)
  *   uo_out[4] sensor degraded     uo_out[5] predicted thermal risk
- *   uo_out[6] baseline isolate    uo_out[7] baseline derate
- *   uio_out[4:2] sensor fault code, uio_out[6:5] baseline state, uio_out[7] busy
+ *   uo_out[6] warning (state == 1) uo_out[7] critical (state == 2)
+ *   uio_out[4:2] sensor fault code, uio_out[7] busy; uio[6:5] unused (inputs)
  */
 
 `default_nettype none
@@ -41,9 +43,7 @@ module tt_um_rvce_sv_pbs (
     wire [15:0] filtered_voltage;
     wire [15:0] filtered_current;
     wire [11:0] filtered_temperature;
-    wire [1:0]  baseline_state;
     wire [1:0]  proposed_state;
-    wire        baseline_derate, baseline_isolate;
     wire        proposed_derate, proposed_isolate;
     wire        sensor_degraded, predicted_risk;
     wire [2:0]  sensor_fault_code;
@@ -75,10 +75,7 @@ module tt_um_rvce_sv_pbs (
         .filtered_voltage(filtered_voltage),
         .filtered_current(filtered_current),
         .filtered_temperature(filtered_temperature),
-        .baseline_state(baseline_state),
         .proposed_state(proposed_state),
-        .baseline_derate(baseline_derate),
-        .baseline_isolate(baseline_isolate),
         .proposed_derate(proposed_derate),
         .proposed_isolate(proposed_isolate),
         .sensor_degraded(sensor_degraded),
@@ -88,8 +85,8 @@ module tt_um_rvce_sv_pbs (
     );
 
     assign uo_out = {
-        baseline_derate,      // [7]
-        baseline_isolate,     // [6]
+        proposed_state == 2'd2, // [7] critical
+        proposed_state == 2'd1, // [6] warning
         predicted_risk,       // [5]
         sensor_degraded,      // [4]
         proposed_isolate,     // [3]
@@ -97,9 +94,9 @@ module tt_um_rvce_sv_pbs (
         proposed_state        // [1:0]
     };
 
-    // uio[1:0] are inputs, uio[7:2] are outputs
-    assign uio_out = {busy, baseline_state, sensor_fault_code, 2'b00};
-    assign uio_oe  = 8'b1111_1100;
+    // uio[1:0] inputs, uio[4:2] and uio[7] outputs, uio[6:5] unused (inputs)
+    assign uio_out = {busy, 2'b00, sensor_fault_code, 2'b00};
+    assign uio_oe  = 8'b1001_1100;
 
     // List all unused inputs to prevent warnings
     wire _unused = &{1'b0, uio_in[7:2],

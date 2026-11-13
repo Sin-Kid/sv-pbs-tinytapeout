@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * SV-PBS core: filtering -> sensor validation + thermal trend prediction
- * -> baseline and proposed (adaptive) protection controllers.
+ * -> adaptive protection controller.
+ * (The fixed-threshold baseline controller used for comparison is kept in
+ * research/reference_rtl and is not part of the chip.)
  */
 
 `default_nettype none
@@ -21,11 +23,7 @@ module sv_pbs_core (
     output wire [15:0] filtered_current,
     output wire [11:0] filtered_temperature,
 
-    output wire [1:0]  baseline_state,
     output wire [1:0]  proposed_state,
-
-    output wire        baseline_derate,
-    output wire        baseline_isolate,
     output wire        proposed_derate,
     output wire        proposed_isolate,
 
@@ -36,9 +34,9 @@ module sv_pbs_core (
     output wire        busy
 );
 
-    wire [15:0] fv;
-    wire [15:0] fi;
-    wire [11:0] ft;
+    wire [12:0] fv13;
+    wire [10:0] fi11;
+    wire [10:0] ft11;
     wire        filtered_valid;
     wire        filter_busy;
     reg         stage2_pending;
@@ -48,7 +46,7 @@ module sv_pbs_core (
         .clk(clk), .rst_n(rst_n),
         .wr_en(wr_en), .wr_idx(wr_idx), .wr_data(wr_data),
         .start(sample_valid),
-        .v_out(fv), .i_out(fi), .t_out(ft),
+        .v_out(fv13), .i_out(fi11), .t_out(ft11),
         .done(filtered_valid), .busy(filter_busy),
         .v_act(va), .i_act(ia), .t_act(ta),
         .v_same(v_same), .i_same(i_same), .t_same(t_same)
@@ -60,6 +58,11 @@ module sv_pbs_core (
         else        stage2_pending <= filtered_valid;
     end
     assign busy = filter_busy | filtered_valid | stage2_pending;
+
+    // Zero-extend to the original units/widths used by the decision logic
+    wire [15:0] fv = {3'd0, fv13};
+    wire [15:0] fi = {5'd0, fi11};
+    wire [11:0] ft = {1'b0, ft11};
 
     wire [11:0] delta;
 
@@ -74,12 +77,6 @@ module sv_pbs_core (
     thermal_predictor tp (
         .clk(clk), .rst_n(rst_n), .valid_in(filtered_valid),
         .temperature(ft), .predicted_risk(predicted_risk), .rise_delta(delta)
-    );
-
-    baseline_controller bc (
-        .clk(clk), .rst_n(rst_n), .valid_in(filtered_valid),
-        .voltage(fv), .current(fi), .temperature(ft),
-        .state(baseline_state), .derate(baseline_derate), .isolate(baseline_isolate)
     );
 
     proposed_controller pc (

@@ -22,7 +22,6 @@ project:
     - "moving_average3.v"
     - "sensor_validator.v"
     - "thermal_predictor.v"
-    - "baseline_controller.v"
     - "proposed_controller.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
@@ -45,8 +44,8 @@ pinout:
   uo[3]: "ISOLATE (MOSFET gate request)"
   uo[4]: "SENSOR_DEGRADED"
   uo[5]: "THERMAL_RISK"
-  uo[6]: "BASE_ISOLATE"
-  uo[7]: "BASE_DERATE"
+  uo[6]: "WARNING"
+  uo[7]: "CRITICAL"
 
   # Bidirectional pins
   uio[0]: "BYTE_STROBE (in)"
@@ -54,8 +53,8 @@ pinout:
   uio[2]: "FAULT0"
   uio[3]: "FAULT1"
   uio[4]: "FAULT2"
-  uio[5]: "BASE_STATE0"
-  uio[6]: "BASE_STATE1"
+  uio[5]: ""
+  uio[6]: ""
   uio[7]: "BUSY"
 
 # Do not change!

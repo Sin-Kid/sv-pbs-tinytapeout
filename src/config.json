@@ -16,7 +16,7 @@
   "PL_TARGET_DENSITY_PCT": 80,
 
   "//": "SV-PBS: design runs at 10 MHz (clock_hz in info.yaml), so CLOCK_PERIOD = 100 ns.",
-  "//": "SV-PBS: cell utilisation is about 70% of a 1x1 tile, so PL_TARGET_DENSITY_PCT is raised to 80.",
+  "//": "SV-PBS: cell utilisation is about 70% of a 1x1 tile after area optimisation, so PL_TARGET_DENSITY_PCT is raised to 80.",
 
   "//": "CLOCK_PERIOD - Increase this in case you are getting setup time violations.",
   "//": "The value is in nanoseconds, so 20ns == 50MHz.",

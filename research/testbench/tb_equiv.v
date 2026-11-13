@@ -1,8 +1,11 @@
 `timescale 1ns/1ps
 `default_nettype none
-// Equivalence check: original SV-PBS core (ref_sv_pbs_core) vs area-optimised
-// core (sv_pbs_core). Both receive identical sample streams; after each sample
-// has fully propagated, every output must match bit-for-bit.
+// Equivalence check: original SV-PBS V2.1 core (ref_sv_pbs_core) vs the
+// taped-out core (sv_pbs_core). The chip receives the raw samples; the
+// original receives the same samples clipped to the chip's full-scale ranges
+// (8191 mV, 2047 mA, 2047 x 0.1 degC). After each sample has fully propagated,
+// filtered values and all proposed-controller / validator / predictor outputs
+// must match bit-for-bit. (The baseline controller is not on the chip.)
 module tb_equiv;
   reg clk = 0, rst_n = 0, sv_r = 0, sv_n = 0;
   reg [15:0] v, i; reg [11:0] t;
@@ -10,12 +13,14 @@ module tb_equiv;
   wire [1:0] rbs, rps, nbs, nps; wire rbd, rbi, rpd, rpi, rsd, rpr, nbd, nbi, npd, npi, nsd, npr, nbusy;
   wire [2:0] rfc, nfc;
 
-  ref_sv_pbs_core R(clk, rst_n, sv_r, v, i, t, rfv, rfi, rft, rbs, rps, rbd, rbi, rpd, rpi, rsd, rpr, rfc);
+  wire [15:0] vc = (v > 16'd8191) ? 16'd8191 : v;
+  wire [15:0] ic = (i > 16'd2047) ? 16'd2047 : i;
+  wire [11:0] tc = (t > 12'd2047) ? 12'd2047 : t;
+  ref_sv_pbs_core R(clk, rst_n, sv_r, vc, ic, tc, rfv, rfi, rft, rbs, rps, rbd, rbi, rpd, rpi, rsd, rpr, rfc);
   reg wr_en = 0; reg [2:0] wr_idx = 0; reg [7:0] wr_data = 0;
   sv_pbs_core     N(.clk(clk), .rst_n(rst_n), .wr_en(wr_en), .wr_idx(wr_idx), .wr_data(wr_data),
                     .sample_valid(sv_n), .filtered_voltage(nfv), .filtered_current(nfi),
-                    .filtered_temperature(nft), .baseline_state(nbs), .proposed_state(nps),
-                    .baseline_derate(nbd), .baseline_isolate(nbi), .proposed_derate(npd),
+                    .filtered_temperature(nft), .proposed_state(nps), .proposed_derate(npd),
                     .proposed_isolate(npi), .sensor_degraded(nsd), .predicted_risk(npr),
                     .sensor_fault_code(nfc), .busy(nbusy));
   always #5 clk = ~clk;
@@ -38,12 +43,12 @@ module tb_equiv;
       @(negedge clk);
       while (nbusy) @(negedge clk);
       repeat (2) @(negedge clk);
-      if ({rfv, rfi, rft, rbs, rps, rbd, rbi, rpd, rpi, rsd, rpr, rfc} !==
-          {nfv, nfi, nft, nbs, nps, nbd, nbi, npd, npi, nsd, npr, nfc}) begin
+      if ({rfv, rfi, rft, rps, rpd, rpi, rsd, rpr, rfc} !==
+          {nfv, nfi, nft, nps, npd, npi, nsd, npr, nfc}) begin
         errors = errors + 1;
         if (errors < 10)
-          $display("MISMATCH sample %0d v=%0d i=%0d t=%0d | ref fv=%0d fi=%0d ft=%0d ps=%0d bs=%0d sd=%b fc=%0d pr=%b | new fv=%0d fi=%0d ft=%0d ps=%0d bs=%0d sd=%b fc=%0d pr=%b",
-            n, v, i, t, rfv, rfi, rft, rps, rbs, rsd, rfc, rpr, nfv, nfi, nft, nps, nbs, nsd, nfc, npr);
+          $display("MISMATCH sample %0d v=%0d i=%0d t=%0d | ref fv=%0d fi=%0d ft=%0d ps=%0d sd=%b fc=%0d pr=%b | new fv=%0d fi=%0d ft=%0d ps=%0d sd=%b fc=%0d pr=%b",
+            n, v, i, t, rfv, rfi, rft, rps, rsd, rfc, rpr, nfv, nfi, nft, nps, nsd, nfc, npr);
       end
       if (rps == 2) s_crit = s_crit + 1;
       if (rps == 1) s_warn = s_warn + 1;
