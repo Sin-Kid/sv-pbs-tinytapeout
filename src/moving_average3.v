@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026 Pavan G
+ * Copyright (c) 2026 Pavan G, Manali Kulkarni, Shylashree N, RV College of Engineering
  * SPDX-License-Identifier: Apache-2.0
  *
  * Sample buffer + three-channel, three-sample moving-average filter.

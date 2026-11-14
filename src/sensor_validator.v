@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026 Pavan G
+ * Copyright (c) 2026 Pavan G, Manali Kulkarni, Shylashree N, RV College of Engineering
  * SPDX-License-Identifier: Apache-2.0
  *
  * Sensor validator: range checks and stuck-sensor detection.

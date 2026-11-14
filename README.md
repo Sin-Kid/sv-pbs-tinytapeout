@@ -4,7 +4,7 @@
 
 **SV-PBS: Sensor-Validated Predictive Battery Safety.** A Tiny Tapeout (SKY130) project from RV College of Engineering.
 
-Author: Pavan G
+Authors: Pavan G, Manali Kulkarni, Shylashree N, RV College of Engineering
 
 - [Project datasheet / documentation](docs/info.md)
 
